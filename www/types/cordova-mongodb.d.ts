@@ -1,7 +1,7 @@
 export declare class CordovaMongodb {
     initiate(appId: string): Promise<any>;
     insertOne(database: string, collection: string, document: object): Promise<any>;
-    insertMany(database: string, collection: string, documents: object): Promise<any>;
+    insertMany(database: string, collection: string, documents: object | string): Promise<number>;
     findOne(database: string, collection: string, filter: object): Promise<any>;
     replaceOne(database: string, collection: string, filter: object, update: object): Promise<any>;
     findAll(database: string, collection: string): Promise<any>;

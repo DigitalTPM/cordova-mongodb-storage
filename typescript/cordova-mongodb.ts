@@ -9,7 +9,8 @@ export class CordovaMongodb {
         return Java.call('MongoDBStorage', 'insertOne', [database, collection, document]);
     }
 
-    public insertMany(database: string, collection: string, documents: object): Promise<any> {
+    /** `documents`: array de documentos o, mejor, ese array ya en una cadena JSON (se parsea una sola vez en nativo). Resuelve con el número de insertados. */
+    public insertMany(database: string, collection: string, documents: object | string): Promise<number> {
         return Java.call('MongoDBStorage', 'insertMany', [database, collection, documents]);
     }
 
