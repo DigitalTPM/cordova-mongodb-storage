@@ -3,15 +3,28 @@ android{
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
+    packagingOptions {
+        // JNA llega por dos caminos (jar genérico y aar de Android) con la misma libjnidispatch.so.
+        pickFirst 'lib/*/libjnidispatch.so'
+    }
 }
 
 dependencies{
+     // 4.0.0 (y 4.0.1) son las únicas publicadas en Maven Central; la "4.1.0" que figuraba antes no existe.
      implementation 'org.mongodb:stitch-android-sdk:4.0.0'
-    //  implementation 'org.mongodb:mongodb-driver-embedded-android:3.9.0'
+     // El SDK agregado no trae el servicio local (LocalMongoDbService): hay que declararlo.
      implementation 'org.mongodb:stitch-android-services-mongodb-local:4.0.0'
+     // El driver embebido PARA ANDROID es el que arrastra org.mongodb:embedded-android
+     // (libmongo_embedded.so para arm64-v8a, armeabi-v7a y x86_64). Sin él la APK sale sin la
+     // librería nativa e initiate falla con "Failed to load the mongodb library: 'mongo_embedded_capi'".
+     implementation 'org.mongodb:mongodb-driver-embedded-android:3.9.0'
 }
 
 configurations.all {
+    // El servicio local de Stitch arrastra mongodb-driver-embedded 3.8.0-beta3 (la variante que
+    // no es Android) con las mismas clases que el driver de arriba: clases duplicadas al mezclar
+    // dex. Se excluye y se queda solo el de Android.
+    exclude group: 'org.mongodb', module: 'mongodb-driver-embedded'
     resolutionStrategy {
         force 'com.android.support:support-v4:27.1.0'
     }
