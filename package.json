@@ -1,6 +1,6 @@
 {
   "name": "@digitaltpm/cordova-mongodb-storage-tpm",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "This plugin provides a mongodb local storage option to Cordova based applications.",
   "cordova": {
     "id": "cordova-mongodb-storage-tpm",
@@ -86,7 +86,8 @@
     "typescript": "^3.4.5"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://nexus.digitaltpm.com/repository/npm-release/"
   },
   "main": "jest.config.js"
 }

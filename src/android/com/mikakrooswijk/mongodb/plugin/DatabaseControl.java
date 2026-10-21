@@ -28,9 +28,17 @@ import com.mongodb.stitch.android.services.mongodb.local.LocalMongoDbService;
 import static com.mongodb.client.model.Projections.*;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import com.mongodb.client.model.Indexes;
 import com.mongodb.client.model.IndexOptions;
+import com.mongodb.client.model.InsertManyOptions;
+import org.bson.BsonArray;
+import org.bson.BsonDocument;
+import org.bson.BsonValue;
+import org.bson.codecs.BsonArrayCodec;
+import org.bson.codecs.DecoderContext;
+import org.bson.json.JsonReader;
 
 public class DatabaseControl {
 
@@ -57,8 +65,32 @@ public class DatabaseControl {
             documentsParsed.add(Document.parse(document.toString()));
         }
 
-        localCollection.insertMany(documentsParsed);
+        // Desordenada: el servidor no tiene que mantener el orden del array y va más rápido.
+        localCollection.insertMany(documentsParsed, new InsertManyOptions().ordered(false));
         return documentsParsed;
+    }
+
+    /**
+     * Inserta un array JSON que llega como CADENA, parseándolo una sola vez con el parser de
+     * BSON. Con el array de org.json cada documento se parseaba (org.json), se volvía a
+     * serializar (toString) y se parseaba otra vez (Document.parse): tres pasadas sobre
+     * megas de texto por cada llamada. Devuelve cuántos ha insertado.
+     */
+    public long insertManyJson(String database, String collection, String documentsJson) {
+        MongoCollection<BsonDocument> localCollection = mobileClient.getDatabase(database)
+                .getCollection(collection, BsonDocument.class);
+        BsonArray array = new BsonArrayCodec().decode(new JsonReader(documentsJson), DecoderContext.builder().build());
+        List<BsonDocument> documentos = new ArrayList<BsonDocument>(array.size());
+        for (BsonValue v : array) {
+            if (v.isDocument()) {
+                documentos.add(v.asDocument());
+            }
+        }
+        if (documentos.isEmpty()) {
+            return 0;
+        }
+        localCollection.insertMany(documentos, new InsertManyOptions().ordered(false));
+        return documentos.size();
     }
 
     public Document findOne(String database, String collection, JSONObject filter) {
@@ -169,8 +201,9 @@ public class DatabaseControl {
 
     public ArrayList<Document> createIndex(String database, String collection, String indexProperty) {
         MongoCollection<Document> localCollection = mobileClient.getDatabase(database).getCollection(collection);
+        // Solo ascendente: Mongo recorre un índice en los dos sentidos, el descendente era
+        // construir y mantener dos índices para lo mismo.
         localCollection.createIndex(Indexes.ascending(indexProperty));
-        localCollection.createIndex(Indexes.descending(indexProperty));
         ArrayList<Document> results = localCollection.listIndexes().into(new ArrayList<Document>());
         return results;
     }

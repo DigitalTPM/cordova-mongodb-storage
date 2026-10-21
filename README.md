@@ -75,22 +75,31 @@ window.plugins.mongodb.insertOne('exampleDatabase', 'exampleCollection', {"examp
 
 ---
 
-#### insertMany(`database: string`, `collection: string`, `documents: JSONArray`) -> `Promise<JSONArray>`
+#### insertMany(`database: string`, `collection: string`, `documents: JSONArray | string`) -> `Promise<number>`
 
 [API reference for insertMany](https://docs.mongodb.com/manual/reference/method/db.collection.insertMany/) <br>
 
 `database` the database that is to be queried. <br>
 `collection` the collection that is to be queried <br>
-`documents` a JSON array that are to be inserted into the database. <br>
+`documents` a JSON array to insert, or that same array already serialized as a JSON string (Android). The string form is the fast path for big batches: it crosses the Cordova bridge as one string and is parsed exactly once, with the BSON parser, instead of being parsed by org.json, re-serialized and parsed again per document. <br>
 
-`returns` A promsie that resolves to a JSONArray containing the inserted documents.
+`returns` A promise that resolves to the number of inserted documents. Since 0.0.3 the inserted documents are NOT returned: returning them meant serializing and parsing every document two more times for a result nobody used. The insert is unordered.
 
 #### Example usage:
 
 ```js
 window.plugins.mongodb.insertMany('exampleDatabase', 'exampleCollection', [{"exampleKey": "exampleValue"}, {"exampleKey2": "exampleValue2"}])
-.then((result) => {
-    console.log(result);
+.then((inserted) => {
+    console.log(inserted); // 2
+})
+```
+
+Fast path for big batches:
+
+```js
+window.plugins.mongodb.insertMany('exampleDatabase', 'exampleCollection', JSON.stringify(bigArray))
+.then((inserted) => {
+    console.log(inserted);
 })
 .catch((error) => {
     console.error(error);
