@@ -10,6 +10,8 @@ import com.mongodb.client.result.DeleteResult;
 
 import org.bson.Document;
 
+import android.util.Log;
+
 import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -38,14 +40,31 @@ public class MongoDBStorage extends CordovaPlugin {
         void run() throws Exception;
     }
 
+    /**
+     * Ejecuta la operación en el hilo de la base y devuelve al JS cualquier fallo, también los
+     * {@link Error}. Antes solo se capturaba {@code Exception}: un {@code OutOfMemoryError} al
+     * guardar un expediente grande llegaba al manejador por defecto de Android, que mata el
+     * proceso sin aviso. Ahora la operación falla, la basura que estaba montando queda libre y el
+     * JS recibe el error y puede avisar al inspector.
+     */
     private void enSerie(final CallbackContext callbackContext, final Operacion operacion) {
         ejecutor.execute(() -> {
             try {
                 operacion.run();
-            } catch (Exception e) {
-                callbackContext.error(e.toString());
+            } catch (OutOfMemoryError e) {
+                responderError(callbackContext, "OutOfMemoryError: sin memoria para completar la operación");
+            } catch (Throwable e) {
+                responderError(callbackContext, e.toString());
             }
         });
+    }
+
+    private static void responderError(CallbackContext callbackContext, String mensaje) {
+        try {
+            callbackContext.error(mensaje);
+        } catch (Throwable e) {
+            Log.e("MongoDBStorage", "No se ha podido devolver el error al JS: " + mensaje, e);
+        }
     }
 
     private static JSONArray aJsonArray(ArrayList<Document> documents) throws Exception {
@@ -100,10 +119,21 @@ public class MongoDBStorage extends CordovaPlugin {
                 }
             });
         } else if (action.equals("replaceOne")) {
+            // Con el documento como CADENA JSON se parsea una sola vez con el parser de BSON y se
+            // devuelve solo si se ha guardado. Con un objeto (apps anteriores) sigue como siempre:
+            // org.json + toString + Document.parse a la ida y el documento entero a la vuelta, que
+            // con un expediente de 15 MB eran cientos de MB en el heap en cada guardado.
             enSerie(callbackContext, () -> {
-                Document document = database.replaceOne(args.getString(0), args.getString(1),
-                        args.getJSONObject(2), args.getJSONObject(3));
-                callbackContext.success(new JSONObject(document.toJson()));
+                Object reemplazo = args.get(3);
+                if (reemplazo instanceof String) {
+                    boolean guardado = database.replaceOneJson(args.getString(0), args.getString(1),
+                            args.getJSONObject(2), (String) reemplazo);
+                    callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, guardado));
+                } else {
+                    Document document = database.replaceOne(args.getString(0), args.getString(1),
+                            args.getJSONObject(2), args.getJSONObject(3));
+                    callbackContext.success(new JSONObject(document.toJson()));
+                }
             });
         } else if (action.equals("findAll")) {
             enSerie(callbackContext, () -> {

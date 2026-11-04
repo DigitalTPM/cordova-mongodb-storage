@@ -131,15 +131,19 @@ window.plugins.mongodb.findOne('exampleDatabase', 'exampleCollection', {"example
 ```
 ---
 
-#### replaceOne(`database: string`, `collection: string`, `filter: JSONObject`, `update: JSONObject`) -> `Promise<JSONObject>`
+#### replaceOne(`database: string`, `collection: string`, `filter: JSONObject`, `update: JSONObject | string`) -> `Promise<JSONObject | boolean>`
 
 [API reference for replaceOne](https://docs.mongodb.com/manual/reference/method/db.collection.replaceOne/) <br>
 
 `database` the database that is to be queried. <br>
 `collection` the collection that is to be queried <br>
 `filter` a JSON object that provides the filter for the replace. <br>
-`update` the object that is to be updates or inserted. <br>
-`returns` A promsie that resolves with the object replaced.
+`update` the object that is to be updates or inserted, as an object or (since 0.0.5, Android) as a JSON **string**. <br>
+`returns` With an object, a promise that resolves with the object replaced. With a JSON string, a promise that resolves to `true` if it was saved.
+
+Since 0.0.5, pass big documents as a JSON string: it is parsed once with the BSON parser and the document is not sent back. With an object every save converted it several times (org.json, `toString`, `Document.parse`) and returned it whole across the bridge; with a 15 MB document that was hundreds of MB on the Java heap, and the `OutOfMemoryError` killed the app. Documents over 16 MB are rejected with `BsonMaximumSizeExceededException`.
+
+Since 0.0.5 any `Throwable` (including `OutOfMemoryError`) thrown by an operation is returned to JS as an error instead of crashing the app, and `initiate` reuses the embedded client if the process already has one (Activity recreated by Android).
 
 ##### ! upsert is set to true for this function.
 

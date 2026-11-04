@@ -12,6 +12,7 @@ import org.json.JSONObject;
 import android.util.Log;
 import org.bson.types.ObjectId;
 import com.mongodb.client.result.DeleteResult;
+import com.mongodb.client.result.UpdateResult;
 
 
 // Base Stitch Packages
@@ -42,11 +43,24 @@ import org.bson.json.JsonReader;
 
 public class DatabaseControl {
 
-    MongoClient mobileClient;
+    /**
+     * Estático: el mongod embebido es uno por proceso. Si Android recrea la Activity sin matar el
+     * proceso (p. ej. al volver de la cámara con poca memoria) se crea un plugin nuevo; antes su
+     * cliente quedaba a null, el {@code initializeDefaultAppClient} fallaba por estar ya
+     * inicializado y todas las operaciones daban NullPointerException hasta reiniciar la app.
+     */
+    private static volatile MongoClient mobileClient;
 
-    public void initiate(String appID) {    
-        final StitchAppClient client = Stitch.initializeDefaultAppClient(appID);
-        mobileClient = client.getServiceClient(LocalMongoDbService.clientFactory);
+    public void initiate(String appID) {
+        synchronized (DatabaseControl.class) {
+            if (mobileClient != null) {
+                return;
+            }
+            final StitchAppClient client = Stitch.hasAppClient(appID)
+                    ? Stitch.getAppClient(appID)
+                    : Stitch.initializeDefaultAppClient(appID);
+            mobileClient = client.getServiceClient(LocalMongoDbService.clientFactory);
+        }
     }
 
     public Document insertOne(String database, String collection, JSONObject document) {
@@ -116,6 +130,20 @@ public class DatabaseControl {
         localCollection.replaceOne(query, updateDoc, new UpdateOptions().upsert(true));
 
         return updateDoc;
+    }
+
+    /**
+     * Reemplaza (o inserta) un documento que llega como CADENA JSON, parseándolo una sola vez con
+     * el parser de BSON. Devuelve si se ha guardado. Un documento de más de 16 MB lo rechaza el
+     * driver con BsonMaximumSizeExceededException, que vuelve al JS como error.
+     */
+    public boolean replaceOneJson(String database, String collection, JSONObject filter, String documentJson) {
+        MongoCollection<BsonDocument> localCollection = mobileClient.getDatabase(database)
+                .getCollection(collection, BsonDocument.class);
+        BsonDocument query = BsonDocument.parse(filter.toString());
+        BsonDocument documento = BsonDocument.parse(documentJson);
+        UpdateResult resultado = localCollection.replaceOne(query, documento, new UpdateOptions().upsert(true));
+        return resultado.getMatchedCount() > 0 || resultado.getUpsertedId() != null;
     }
 
     public ArrayList<Document> findAll(String database, String collection) {
